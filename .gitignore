@@ -1,0 +1,21 @@
+# Go build
+/bin/
+/build/
+/*.exe
+*.exe
+*.test
+*.out
+
+# Go modules
+vendor/
+
+# GoLand / JetBrains
+.idea/
+
+# Logs & temporary
+*.log
+*.tmp
+
+# OS-specific
+.DS_Store
+Thumbs.db
