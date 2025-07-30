@@ -1,7 +1,7 @@
 // file: go-abac-library/internal/mocks/fetchers.go
 package mocks
 
-import "github.com/duc382/go-abac-library/abac"
+import "github.com/duclek15/go-abac-library/abac"
 
 // MockFetcher giả lập việc lấy dữ liệu cho unit test.
 type MockFetcher struct{}

@@ -8,7 +8,7 @@ Bạn cần cài đặt thư viện chính và các dependency cần thiết.
 
 ```bash
 # Thư viện chính
-go get github.com/duc382/go-abac-library/abac
+go get github.com/duclek15/go-abac-library/abac
 
 # Thư viện đánh giá biểu thức (quan trọng)
 go get github.com/casbin/govaluate

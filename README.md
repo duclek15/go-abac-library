@@ -1,6 +1,6 @@
 # Thư viện Phân quyền ABAC bằng Go & Casbin
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/duc382/go-abac-library)](https://goreportcard.com/report/github.com/duc382/go-abac-library)
+[![Go Report Card](https://goreportcard.com/badge/github.com/duclek15/go-abac-library)](https://goreportcard.com/report/github.com/duclek15/go-abac-library)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Một thư viện phân quyền dựa trên thuộc tính (Attribute-Based Access Control) mạnh mẽ, linh hoạt và dễ mở rộng được xây dựng bằng Go, sử dụng lõi Casbin. Thư viện này được thiết kế để tách biệt hoàn toàn logic phân quyền khỏi logic nghiệp vụ và nguồn dữ liệu của bạn.
@@ -16,7 +16,7 @@ Một thư viện phân quyền dựa trên thuộc tính (Attribute-Based Acces
 ## 🚀 Cài đặt
 
 ```bash
-go get github.com/duc382/go-abac-library/abac
+go get github.com/duclek15/go-abac-library/abac
 ```
 
 ## ⚡ Bắt đầu nhanh (Quick Start)
@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"log"
 	
-	"github.com/duc382/go-abac-library/abac"
+	"github.com/duclek15/go-abac-library/abac"
 )
 
 // Triển khai Fetcher đơn giản (PIP)

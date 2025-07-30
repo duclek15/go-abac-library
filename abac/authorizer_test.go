@@ -4,8 +4,8 @@ package abac_test
 import (
 	"testing"
 
-	"github.com/duc382/go-abac-library/abac"
-	"github.com/duc382/go-abac-library/internal/mocks"
+	"github.com/duclek15/go-abac-library/abac"
+	"github.com/duclek15/go-abac-library/internal/mocks"
 )
 
 func TestAuthorizer(t *testing.T) {

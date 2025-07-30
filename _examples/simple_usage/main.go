@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/duc382/go-abac-library/abac"
+	"github.com/duclek15/go-abac-library/abac"
 	"github.com/gin-gonic/gin"
 )
 

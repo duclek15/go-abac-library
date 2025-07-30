@@ -3,7 +3,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/duc382/go-abac-library/abac"
+	"github.com/duclek15/go-abac-library/abac"
 )
 
 // UserRepo là một PIP, triển khai SubjectFetcher.

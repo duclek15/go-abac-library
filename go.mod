@@ -1,4 +1,4 @@
-module github.com/duc382/go-abac-library
+module github.com/duclek15/go-abac-library
 
 go 1.23.0
 
