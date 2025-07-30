@@ -142,7 +142,7 @@ func registerCustomFunctions(e *casbin.Enforcer) {
 // =========================================================================
 
 // Check là hàm chính để kiểm tra quyền truy cập.
-func (a *Authorizer) Check(subjectID, resourceID, action string, envAttrs Attributes) (bool, error) {
+func (a *Authorizer) Check(tenantID string, subjectID string, resourceID string, action string, envAttrs Attributes) (bool, error) {
 	subAttrs, err := a.subjectFetcher.GetSubjectAttributes(subjectID)
 	if err != nil {
 		return false, fmt.Errorf("subject attributes error: %w", err)
@@ -168,10 +168,10 @@ func (a *Authorizer) Check(subjectID, resourceID, action string, envAttrs Attrib
 		Subject:  subAttrs,
 		Resource: resAttrs,
 		Action:   action,
-		Env:      envAttrs, // <-- Sử dụng envAttrs đã được tổng hợp
+		Env:      envAttrs,
 	}
 
-	return a.enforcer.Enforce(request)
+	return a.enforcer.Enforce(tenantID, request)
 }
 
 // AuthorizationRequest chứa tất cả thông tin cho một yêu cầu phân quyền.
