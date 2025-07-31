@@ -44,6 +44,7 @@ func NewABACSystemFromFile(modelPath, policyPath string, sf SubjectFetcher, rf R
 
 // NewABACSystemFromDB khởi tạo hệ thống với policy được nạp từ database.
 func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
+	gormadapter.TurnOffAutoMigrate(db)
 	adapter, err := gormadapter.NewAdapterByDB(db)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gorm adapter: %w", err)
@@ -68,7 +69,7 @@ func NewABACSystemFromDBUseTableName(
 	rf ResourceFetcher,
 	customFunc map[string]govaluate.ExpressionFunction,
 ) (*Authorizer, *PolicyManager, error) {
-
+	gormadapter.TurnOffAutoMigrate(db)
 	adapter, err := gormadapter.NewAdapterByDBUseTableName(db, preFix, tableName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gorm adapter with table name %s: %w", tableName, err)
