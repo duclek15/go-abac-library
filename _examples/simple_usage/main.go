@@ -32,7 +32,7 @@ func (app *App) authMiddleware() gin.HandlerFunc {
 
 		log.Printf("PEP: Check(Subject: %s, Resource: %s, Action: %s)", subjectID, resourceID, action)
 		envAtt := abac.Attributes{}
-		isAllowed, err := app.Authorizer.Check(subjectID, resourceID, action, envAtt)
+		isAllowed, err := app.Authorizer.Check("*", subjectID, resourceID, action, envAtt)
 		if err != nil || !isAllowed {
 			log.Printf("PEP: DENIED. Reason: %v", err)
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
@@ -53,6 +53,7 @@ func main() {
 		"casbin_config/abac_policy.csv",
 		userRepo,
 		docRepo,
+		nil,
 	)
 	if err != nil {
 		log.Fatalf("FATAL: Could not create ABAC system: %v", err)

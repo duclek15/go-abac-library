@@ -20,22 +20,23 @@ type Authorizer struct {
 	subjectFetcher  SubjectFetcher
 	resourceFetcher ResourceFetcher
 }
+type CustomFunctionMap map[string]interface{}
 
 // =========================================================================
 // == Các hàm khởi tạo hệ thống (Factory Functions)
 // =========================================================================
 
 // NewABACSystemFromFile khởi tạo hệ thống từ file model và file policy.
-func NewABACSystemFromFile(modelPath, policyPath string, sf SubjectFetcher, rf ResourceFetcher) (*Authorizer, *PolicyManager, error) {
+func NewABACSystemFromFile(modelPath, policyPath string, sf SubjectFetcher, rf ResourceFetcher, funcs CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
 	e, err := casbin.NewEnforcer(modelPath, policyPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create enforcer from file: %w", err)
 	}
-	return newSystemWithEnforcer(e, sf, rf)
+	return newSystemWithEnforcer(e, sf, rf, funcs)
 }
 
 // NewABACSystemFromDB khởi tạo hệ thống với policy được nạp từ database.
-func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf ResourceFetcher) (*Authorizer, *PolicyManager, error) {
+func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf ResourceFetcher, funcs CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
 	adapter, err := gormadapter.NewAdapterByDB(db)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gorm adapter: %w", err)
@@ -47,7 +48,7 @@ func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf Re
 	if err := e.LoadPolicy(); err != nil {
 		return nil, nil, fmt.Errorf("failed to load policy from database: %w", err)
 	}
-	return newSystemWithEnforcer(e, sf, rf)
+	return newSystemWithEnforcer(e, sf, rf, funcs)
 }
 
 // NewABACSystemFromDBUseTableName khởi tạo hệ thống từ DB với một tên bảng tùy chỉnh.
@@ -58,6 +59,7 @@ func NewABACSystemFromDBUseTableName(
 	tableName string,
 	sf SubjectFetcher,
 	rf ResourceFetcher,
+	funcs CustomFunctionMap,
 ) (*Authorizer, *PolicyManager, error) {
 
 	adapter, err := gormadapter.NewAdapterByDBUseTableName(db, preFix, tableName)
@@ -72,11 +74,11 @@ func NewABACSystemFromDBUseTableName(
 	if err := e.LoadPolicy(); err != nil {
 		return nil, nil, fmt.Errorf("failed to load policy from database: %w", err)
 	}
-	return newSystemWithEnforcer(e, sf, rf)
+	return newSystemWithEnforcer(e, sf, rf, funcs)
 }
 
 // NewABACSystemFromStrings khởi tạo hệ thống từ các chuỗi model và policy trong bộ nhớ.
-func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf ResourceFetcher) (*Authorizer, *PolicyManager, error) {
+func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf ResourceFetcher, funcs CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
 	m, err := model.NewModelFromString(modelStr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create model from string: %w", err)
@@ -105,17 +107,30 @@ func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf 
 		}
 	}
 
-	return newSystemWithEnforcer(e, sf, rf)
+	return newSystemWithEnforcer(e, sf, rf, funcs)
 }
 
-// =========================================================================
-// == Hàm trợ giúp nội bộ
-// =========================================================================
+// CustomFunctionMap định nghĩa một map chứa các hàm tùy chỉnh mà người dùng muốn thêm.
+// Key là tên hàm sẽ dùng trong policy, Value là hàm Go tương ứng.
 
 // newSystemWithEnforcer là hàm private để hoàn tất việc khởi tạo, tránh lặp code.
-func newSystemWithEnforcer(e *casbin.Enforcer, sf SubjectFetcher, rf ResourceFetcher) (*Authorizer, *PolicyManager, error) {
+func newSystemWithEnforcer(e *casbin.Enforcer, sf SubjectFetcher, rf ResourceFetcher, funcs CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
 	registerCustomFunctions(e)
 
+	// Đăng ký các hàm do người dùng cung cấp
+	if funcs != nil {
+		for name, function := range funcs {
+			// --- THAY ĐỔI Ở ĐÂY ---
+			// Thực hiện ép kiểu từ interface{} sang govaluate.ExpressionFunction
+			if typedFunc, ok := function.(govaluate.ExpressionFunction); ok {
+				// Nếu ép kiểu thành công, đăng ký hàm đã có đúng kiểu dữ liệu
+				e.AddFunction(name, typedFunc)
+			} else {
+				// Nếu người dùng truyền vào một thứ không phải là hàm, báo lỗi
+				return nil, nil, fmt.Errorf("custom function '%s' is not of the correct type govaluate.ExpressionFunction", name)
+			}
+		}
+	}
 	authorizer := &Authorizer{
 		enforcer:        e,
 		subjectFetcher:  sf,
