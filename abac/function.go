@@ -98,7 +98,7 @@ func isBusinessHoursFunc(args ...interface{}) (interface{}, error) {
 
 // hasGlobalRoleFunc kiểm tra vai trò toàn hệ thống của Subject.
 // Cách dùng trong policy: hasGlobalRole(Subject, 'root')
-func HasGlobalRoleFunc(args ...interface{}) (interface{}, error) {
+func hasGlobalRoleFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return false, fmt.Errorf("hàm 'hasGlobalRole' yêu cầu 2 tham số: Subject, role")
 	}
@@ -121,7 +121,7 @@ func HasGlobalRoleFunc(args ...interface{}) (interface{}, error) {
 
 // hasTenantRoleFunc kiểm tra vai trò trong tenant của Subject.
 // Cách dùng trong policy: hasTenantRole(Subject, 'tenant1', 'admin')
-func HasTenantRoleFunc(args ...interface{}) (interface{}, error) {
+func hasTenantRoleFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 3 {
 		return false, fmt.Errorf("hàm 'hasTenantRole' yêu cầu 3 tham số: Subject, tenantID, role")
 	}
@@ -148,7 +148,7 @@ func HasTenantRoleFunc(args ...interface{}) (interface{}, error) {
 
 // hasOrgRoleFunc kiểm tra vai trò trong tổ chức của Subject.
 // Cách dùng trong policy: hasOrgRole(Subject, 'org_hr_1', 'TP')
-func HasOrgRoleFunc(args ...interface{}) (interface{}, error) {
+func hasOrgRoleFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 3 {
 		return false, fmt.Errorf("hàm 'hasOrgRole' yêu cầu 3 tham số: Subject, orgID, role")
 	}

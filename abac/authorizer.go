@@ -143,6 +143,9 @@ func registerCustomFunctions(e *casbin.Enforcer) {
 	e.AddFunction("isIpInCidr", isIpInCidrFunc)
 	e.AddFunction("matches", matchesFunc)
 	e.AddFunction("isBusinessHours", isBusinessHoursFunc)
+	e.AddFunction("hasGlobalRole", hasGlobalRoleFunc)
+	e.AddFunction("hasTenantRole", hasTenantRoleFunc)
+	e.AddFunction("hasOrgRole", hasOrgRoleFunc)
 }
 
 // =========================================================================
