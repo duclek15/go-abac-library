@@ -174,6 +174,11 @@ func (a *Authorizer) Check(tenantID string, subjectID string, resourceID string,
 	return a.enforcer.Enforce(tenantID, request)
 }
 
+// GetEnforcer trả về Enforcer của Authorizer, dùng để quản lý policy.
+func (a *Authorizer) GetEnforcer() *casbin.Enforcer {
+	return a.enforcer
+}
+
 // AuthorizationRequest chứa tất cả thông tin cho một yêu cầu phân quyền.
 type AuthorizationRequest struct {
 	Subject  Attributes
