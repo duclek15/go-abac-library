@@ -95,3 +95,86 @@ func isBusinessHoursFunc(args ...interface{}) (interface{}, error) {
 	}
 	return currentTime >= startHour && currentTime < endHour, nil
 }
+
+// hasGlobalRoleFunc kiểm tra vai trò toàn hệ thống của Subject.
+// Cách dùng trong policy: hasGlobalRole(Subject, 'root')
+func HasGlobalRoleFunc(args ...interface{}) (interface{}, error) {
+	if len(args) != 2 {
+		return false, fmt.Errorf("hàm 'hasGlobalRole' yêu cầu 2 tham số: Subject, role")
+	}
+
+	subject, ok1 := args[0].(Attributes)
+	roleToCheck, ok2 := args[1].(string)
+	if !ok1 || !ok2 {
+		return false, fmt.Errorf("tham số của 'hasGlobalRole' phải là (Attributes, string)")
+	}
+
+	if roles, ok := subject["global_roles"].([]interface{}); ok {
+		for _, r := range roles {
+			if role, ok := r.(string); ok && role == roleToCheck {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// hasTenantRoleFunc kiểm tra vai trò trong tenant của Subject.
+// Cách dùng trong policy: hasTenantRole(Subject, 'tenant1', 'admin')
+func HasTenantRoleFunc(args ...interface{}) (interface{}, error) {
+	if len(args) != 3 {
+		return false, fmt.Errorf("hàm 'hasTenantRole' yêu cầu 3 tham số: Subject, tenantID, role")
+	}
+	subject, ok1 := args[0].(Attributes)
+	tenantToCheck, ok2 := args[1].(string)
+	roleToCheck, ok3 := args[2].(string)
+	if !ok1 || !ok2 || !ok3 {
+		return false, fmt.Errorf("tham số của 'hasTenantRole' phải là (Attributes, string, string)")
+	}
+
+	if tenants, ok := subject["tenants"].([]interface{}); ok {
+		for _, t := range tenants {
+			if tenantMap, ok := t.(map[string]interface{}); ok {
+				if id, _ := tenantMap["id"].(string); id == tenantToCheck {
+					if role, _ := tenantMap["role"].(string); role == roleToCheck {
+						return true, nil
+					}
+				}
+			}
+		}
+	}
+	return false, nil
+}
+
+// hasOrgRoleFunc kiểm tra vai trò trong tổ chức của Subject.
+// Cách dùng trong policy: hasOrgRole(Subject, 'org_hr_1', 'TP')
+func HasOrgRoleFunc(args ...interface{}) (interface{}, error) {
+	if len(args) != 3 {
+		return false, fmt.Errorf("hàm 'hasOrgRole' yêu cầu 3 tham số: Subject, orgID, role")
+	}
+	subject, ok1 := args[0].(Attributes)
+	orgToCheck, ok2 := args[1].(string)
+	roleToCheck, ok3 := args[2].(string)
+	if !ok1 || !ok2 || !ok3 {
+		return false, fmt.Errorf("tham số của 'hasOrgRole' phải là (Attributes, string, string)")
+	}
+
+	if tenants, ok := subject["tenants"].([]interface{}); ok {
+		for _, t := range tenants {
+			if tenantMap, ok := t.(map[string]interface{}); ok {
+				if orgs, ok := tenantMap["organizations"].([]interface{}); ok {
+					for _, org := range orgs {
+						if orgMap, ok := org.(map[string]interface{}); ok {
+							if id, _ := orgMap["id"].(string); id == orgToCheck {
+								if role, _ := orgMap["role"].(string); role == roleToCheck {
+									return true, nil
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false, nil
+}
