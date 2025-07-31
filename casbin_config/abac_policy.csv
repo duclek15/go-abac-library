@@ -1,3 +1,8 @@
-p, Subject.role == 'admin', allow
-p, Subject.role == 'editor' && Resource.department == Subject.department && Action == 'edit', allow
-p, Subject.role == 'editor' && Action == 'delete', deny
+# Quy tắc chung: root được làm mọi thứ
+p, *, "Action == 'approve_level_2' && hasGlobalRole(Subject, 'root')", allow
+
+# Quy tắc cho Tenant 1: hr_manager được duyệt đơn của MỌI phòng ban
+p, tenant1, "Action == 'approve_level_2' && hasTenantRole(Subject, 'tenant1', 'hr_manager')", allow
+
+# Quy tắc cho Tenant 2: hr_manager CHỈ được duyệt đơn của phòng HR
+p, tenant2, "Action == 'approve_level_2' && hasTenantRole(Subject, 'tenant2', 'hr_manager') && Resource.department == 'hr'", allow

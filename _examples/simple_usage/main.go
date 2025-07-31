@@ -53,7 +53,6 @@ func main() {
 		"casbin_config/abac_policy.csv",
 		userRepo,
 		docRepo,
-		nil,
 	)
 	if err != nil {
 		log.Fatalf("FATAL: Could not create ABAC system: %v", err)

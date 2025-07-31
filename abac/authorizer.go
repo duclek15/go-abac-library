@@ -3,6 +3,7 @@ package abac
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -21,21 +22,28 @@ type Authorizer struct {
 	resourceFetcher ResourceFetcher
 }
 
+type CustomFunctionMap map[string]govaluate.ExpressionFunction
+
+// expressionEvaluator là một struct giữ trạng thái các hàm tùy chỉnh của người dùng.
+type expressionEvaluator struct {
+	userFunctions CustomFunctionMap
+}
+
 // =========================================================================
 // == Các hàm khởi tạo hệ thống (Factory Functions)
 // =========================================================================
 
 // NewABACSystemFromFile khởi tạo hệ thống từ file model và file policy.
-func NewABACSystemFromFile(modelPath, policyPath string, sf SubjectFetcher, rf ResourceFetcher) (*Authorizer, *PolicyManager, error) {
+func NewABACSystemFromFile(modelPath, policyPath string, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
 	e, err := casbin.NewEnforcer(modelPath, policyPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create enforcer from file: %w", err)
 	}
-	return newSystemWithEnforcer(e, sf, rf)
+	return newSystemWithEnforcer(e, sf, rf, customFunc)
 }
 
 // NewABACSystemFromDB khởi tạo hệ thống với policy được nạp từ database.
-func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf ResourceFetcher) (*Authorizer, *PolicyManager, error) {
+func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
 	adapter, err := gormadapter.NewAdapterByDB(db)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gorm adapter: %w", err)
@@ -47,7 +55,7 @@ func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf Re
 	if err := e.LoadPolicy(); err != nil {
 		return nil, nil, fmt.Errorf("failed to load policy from database: %w", err)
 	}
-	return newSystemWithEnforcer(e, sf, rf)
+	return newSystemWithEnforcer(e, sf, rf, customFunc)
 }
 
 // NewABACSystemFromDBUseTableName khởi tạo hệ thống từ DB với một tên bảng tùy chỉnh.
@@ -58,6 +66,7 @@ func NewABACSystemFromDBUseTableName(
 	tableName string,
 	sf SubjectFetcher,
 	rf ResourceFetcher,
+	customFunc map[string]govaluate.ExpressionFunction,
 ) (*Authorizer, *PolicyManager, error) {
 
 	adapter, err := gormadapter.NewAdapterByDBUseTableName(db, preFix, tableName)
@@ -72,11 +81,11 @@ func NewABACSystemFromDBUseTableName(
 	if err := e.LoadPolicy(); err != nil {
 		return nil, nil, fmt.Errorf("failed to load policy from database: %w", err)
 	}
-	return newSystemWithEnforcer(e, sf, rf)
+	return newSystemWithEnforcer(e, sf, rf, customFunc)
 }
 
 // NewABACSystemFromStrings khởi tạo hệ thống từ các chuỗi model và policy trong bộ nhớ.
-func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf ResourceFetcher) (*Authorizer, *PolicyManager, error) {
+func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
 	m, err := model.NewModelFromString(modelStr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create model from string: %w", err)
@@ -105,16 +114,21 @@ func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf 
 		}
 	}
 
-	return newSystemWithEnforcer(e, sf, rf)
+	return newSystemWithEnforcer(e, sf, rf, customFunc)
 }
 
 // CustomFunctionMap định nghĩa một map chứa các hàm tùy chỉnh mà người dùng muốn thêm.
 // Key là tên hàm sẽ dùng trong policy, Value là hàm Go tương ứng.
 
 // newSystemWithEnforcer là hàm private để hoàn tất việc khởi tạo, tránh lặp code.
-func newSystemWithEnforcer(e *casbin.Enforcer, sf SubjectFetcher, rf ResourceFetcher) (*Authorizer, *PolicyManager, error) {
-	registerCustomFunctions(e)
+func newSystemWithEnforcer(e *casbin.Enforcer, sf SubjectFetcher, rf ResourceFetcher, customFunction CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
+	// Tạo một instance của evaluator, truyền map custom function vào.
+	evaluator := &expressionEvaluator{
+		userFunctions: customFunction,
+	}
 
+	// Đăng ký phương thức Evaluate của INSTANCE evaluator đó.
+	e.AddFunction("evaluate", evaluator.Evaluate)
 	authorizer := &Authorizer{
 		enforcer:        e,
 		subjectFetcher:  sf,
@@ -124,19 +138,6 @@ func newSystemWithEnforcer(e *casbin.Enforcer, sf SubjectFetcher, rf ResourceFet
 		enforcer: e,
 	}
 	return authorizer, policyManager, nil
-}
-
-// registerCustomFunctions đăng ký tất cả các hàm tùy chỉnh vào enforcer.
-func registerCustomFunctions(e *casbin.Enforcer) {
-	e.AddFunction("evaluate", evaluateFunc)
-	e.AddFunction("has", hasFunc)
-	e.AddFunction("intersects", intersectsFunc)
-	e.AddFunction("isIpInCidr", isIpInCidrFunc)
-	e.AddFunction("matches", matchesFunc)
-	e.AddFunction("isBusinessHours", isBusinessHoursFunc)
-	e.AddFunction("hasGlobalRole", hasGlobalRoleFunc)
-	e.AddFunction("hasTenantRole", hasTenantRoleFunc)
-	e.AddFunction("hasOrgRole", hasOrgRoleFunc)
 }
 
 // =========================================================================
@@ -176,11 +177,6 @@ func (a *Authorizer) Check(tenantID string, subjectID string, resourceID string,
 	return a.enforcer.Enforce(tenantID, request)
 }
 
-// GetEnforcer trả về Enforcer của Authorizer, dùng để quản lý policy.
-func (a *Authorizer) GetEnforcer() *casbin.Enforcer {
-	return a.enforcer
-}
-
 // AuthorizationRequest chứa tất cả thông tin cho một yêu cầu phân quyền.
 type AuthorizationRequest struct {
 	Subject  Attributes
@@ -190,13 +186,34 @@ type AuthorizationRequest struct {
 }
 
 // evaluateFunc là hàm tùy chỉnh của Casbin để đánh giá các biểu thức.
-func evaluateFunc(args ...interface{}) (interface{}, error) {
-	rule := args[0].(string)
-	req := args[1].(*AuthorizationRequest)
+// Evaluate là phương thức thực hiện việc đánh giá, có chữ ký đúng chuẩn.
+func (ev *expressionEvaluator) Evaluate(args ...interface{}) (interface{}, error) {
+	if len(args) != 2 {
+		return false, errors.New("evaluate: yêu cầu 2 tham số (rule, request)")
+	}
+	ruleStr, ok := args[0].(string)
+	if !ok {
+		return false, errors.New("evaluate: tham số đầu tiên phải là chuỗi (rule)")
+	}
+	req, ok := args[1].(*AuthorizationRequest)
+	if !ok {
+		return false, errors.New("evaluate: tham số thứ hai phải là *AuthorizationRequest")
+	}
 
-	expression, err := govaluate.NewEvaluableExpression(rule)
+	// Tạo một map chứa TẤT CẢ các hàm
+	allFunctions := make(CustomFunctionMap)
+
+	// 2. Thêm các hàm do người dùng cung cấp (có thể ghi đè hàm mặc định nếu trùng tên)
+	if ev.userFunctions != nil {
+		for name, function := range ev.userFunctions {
+			allFunctions[name] = function
+		}
+	}
+
+	// Khởi tạo bộ đánh giá biểu thức với BỘ HÀM ĐÃ KẾT HỢP
+	expr, err := govaluate.NewEvaluableExpressionWithFunctions(ruleStr, allFunctions)
 	if err != nil {
-		return false, fmt.Errorf("invalid rule syntax '%s': %w", rule, err)
+		return false, fmt.Errorf("invalid rule syntax '%s': %w", ruleStr, err)
 	}
 
 	parameters := map[string]interface{}{
@@ -206,9 +223,9 @@ func evaluateFunc(args ...interface{}) (interface{}, error) {
 		"Env":      req.Env,
 	}
 
-	result, err := expression.Evaluate(parameters)
+	result, err := expr.Evaluate(parameters)
 	if err != nil {
-		return false, fmt.Errorf("evaluation failed for rule '%s': %w", rule, err)
+		return false, fmt.Errorf("evaluate: lỗi khi đánh giá rule '%s': %w", ruleStr, err)
 	}
 
 	return result, nil

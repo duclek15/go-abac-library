@@ -8,7 +8,7 @@ import (
 )
 
 // hasFunc kiểm tra xem một giá trị có tồn tại trong một slice hay không.
-func hasFunc(args ...interface{}) (interface{}, error) {
+func HasFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return false, fmt.Errorf("hàm 'has' yêu cầu 2 tham số, nhận được %d", len(args))
 	}
@@ -26,7 +26,7 @@ func hasFunc(args ...interface{}) (interface{}, error) {
 }
 
 // intersectsFunc kiểm tra xem hai slice có ít nhất một phần tử chung hay không.
-func intersectsFunc(args ...interface{}) (interface{}, error) {
+func IntersectsFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return false, fmt.Errorf("hàm 'intersects' yêu cầu 2 tham số, nhận được %d", len(args))
 	}
@@ -48,7 +48,7 @@ func intersectsFunc(args ...interface{}) (interface{}, error) {
 }
 
 // isIpInCidrFunc kiểm tra một địa chỉ IP có nằm trong một dải mạng CIDR hay không.
-func isIpInCidrFunc(args ...interface{}) (interface{}, error) {
+func IsIpInCidrFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return false, fmt.Errorf("hàm 'isIpInCidr' yêu cầu 2 tham số")
 	}
@@ -69,7 +69,7 @@ func isIpInCidrFunc(args ...interface{}) (interface{}, error) {
 }
 
 // matchesFunc kiểm tra một chuỗi có khớp với một mẫu biểu thức chính quy (Regex) hay không.
-func matchesFunc(args ...interface{}) (interface{}, error) {
+func MatchesFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return false, fmt.Errorf("hàm 'matches' yêu cầu 2 tham số")
 	}
@@ -82,7 +82,7 @@ func matchesFunc(args ...interface{}) (interface{}, error) {
 }
 
 // isBusinessHoursFunc kiểm tra xem giờ hiện tại có nằm trong giờ hành chính hay không.
-func isBusinessHoursFunc(args ...interface{}) (interface{}, error) {
+func IsBusinessHoursFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 3 {
 		return false, fmt.Errorf("hàm 'isBusinessHours' yêu cầu 3 tham số: currentTime, startHour, endHour")
 	}
@@ -98,7 +98,7 @@ func isBusinessHoursFunc(args ...interface{}) (interface{}, error) {
 
 // hasGlobalRoleFunc kiểm tra vai trò toàn hệ thống của Subject.
 // Cách dùng trong policy: hasGlobalRole(Subject, 'root')
-func hasGlobalRoleFunc(args ...interface{}) (interface{}, error) {
+func HasGlobalRoleFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return false, fmt.Errorf("hàm 'hasGlobalRole' yêu cầu 2 tham số: Subject, role")
 	}
@@ -121,7 +121,7 @@ func hasGlobalRoleFunc(args ...interface{}) (interface{}, error) {
 
 // hasTenantRoleFunc kiểm tra vai trò trong tenant của Subject.
 // Cách dùng trong policy: hasTenantRole(Subject, 'tenant1', 'admin')
-func hasTenantRoleFunc(args ...interface{}) (interface{}, error) {
+func HasTenantRoleFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 3 {
 		return false, fmt.Errorf("hàm 'hasTenantRole' yêu cầu 3 tham số: Subject, tenantID, role")
 	}
@@ -148,7 +148,7 @@ func hasTenantRoleFunc(args ...interface{}) (interface{}, error) {
 
 // hasOrgRoleFunc kiểm tra vai trò trong tổ chức của Subject.
 // Cách dùng trong policy: hasOrgRole(Subject, 'org_hr_1', 'TP')
-func hasOrgRoleFunc(args ...interface{}) (interface{}, error) {
+func HasOrgRoleFunc(args ...interface{}) (interface{}, error) {
 	if len(args) != 3 {
 		return false, fmt.Errorf("hàm 'hasOrgRole' yêu cầu 3 tham số: Subject, orgID, role")
 	}
