@@ -20,7 +20,7 @@ type Authorizer struct {
 	subjectFetcher  SubjectFetcher
 	resourceFetcher ResourceFetcher
 }
-type CustomFunctionMap map[string]interface{}
+type CustomFunctionMap map[string]govaluate.ExpressionFunction
 
 // =========================================================================
 // == Các hàm khởi tạo hệ thống (Factory Functions)
@@ -120,15 +120,8 @@ func newSystemWithEnforcer(e *casbin.Enforcer, sf SubjectFetcher, rf ResourceFet
 	// Đăng ký các hàm do người dùng cung cấp
 	if funcs != nil {
 		for name, function := range funcs {
-			// --- THAY ĐỔI Ở ĐÂY ---
-			// Thực hiện ép kiểu từ interface{} sang govaluate.ExpressionFunction
-			if typedFunc, ok := function.(govaluate.ExpressionFunction); ok {
-				// Nếu ép kiểu thành công, đăng ký hàm đã có đúng kiểu dữ liệu
-				e.AddFunction(name, typedFunc)
-			} else {
-				// Nếu người dùng truyền vào một thứ không phải là hàm, báo lỗi
-				return nil, nil, fmt.Errorf("custom function '%s' is not of the correct type govaluate.ExpressionFunction", name)
-			}
+			e.AddFunction(name, function)
+
 		}
 	}
 	authorizer := &Authorizer{
