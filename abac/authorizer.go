@@ -3,6 +3,7 @@ package abac
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -146,13 +147,13 @@ func newSystemWithEnforcer(e *casbin.Enforcer, sf SubjectFetcher, rf ResourceFet
 // =========================================================================
 
 // Check là hàm chính để kiểm tra quyền truy cập.
-func (a *Authorizer) Check(tenantID string, subjectID string, resourceID string, action string, envAttrs Attributes) (bool, error) {
-	subAttrs, err := a.subjectFetcher.GetSubjectAttributes(subjectID)
+func (a *Authorizer) Check(ctx *context.Context, tenantID string, subjectID string, resourceID string, action string, envAttrs Attributes) (bool, error) {
+	subAttrs, err := a.subjectFetcher.GetSubjectAttributes(ctx, subjectID, nil)
 	if err != nil {
 		return false, fmt.Errorf("subject attributes error: %w", err)
 	}
 
-	resAttrs, err := a.resourceFetcher.GetResourceAttributes(resourceID)
+	resAttrs, err := a.resourceFetcher.GetResourceAttributes(ctx, resourceID, nil)
 	if err != nil {
 		return false, fmt.Errorf("resource attributes error: %w", err)
 	}

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/duclek15/go-abac-library/abac"
 )
@@ -9,7 +10,7 @@ import (
 // UserRepo là một PIP, triển khai SubjectFetcher.
 type UserRepo struct{}
 
-func (ur *UserRepo) GetSubjectAttributes(subjectID string) (abac.Attributes, error) {
+func (ur *UserRepo) GetSubjectAttributes(ctx *context.Context, subjectID interface{}, subjectType *interface{}) (abac.Attributes, error) {
 	fmt.Printf("PIP: Fetching attributes for subject '%s'\n", subjectID)
 	// Mock data người dùng trong môi trường multi-tenant
 	users := map[string]abac.Attributes{
@@ -25,7 +26,12 @@ func (ur *UserRepo) GetSubjectAttributes(subjectID string) (abac.Attributes, err
 		"t2_hr_staff":    {"id": "t2_hr_staff", "role": "staff", "department": "hr", "tenant": "tenant2"},
 		"t2_sales_staff": {"id": "t2_sales_staff", "role": "staff", "department": "sales", "tenant": "tenant2"},
 	}
-	if user, ok := users[subjectID]; ok {
+	//convert subjectID to string
+	subjectIDStr, ok := subjectID.(string)
+	if !ok {
+		return nil, abac.ErrSubjectNotFound
+	}
+	if user, ok := users[subjectIDStr]; ok {
 		return user, nil
 	}
 	return nil, abac.ErrSubjectNotFound
@@ -34,7 +40,7 @@ func (ur *UserRepo) GetSubjectAttributes(subjectID string) (abac.Attributes, err
 // DocumentRepo là một PIP, triển khai ResourceFetcher.
 type DocumentRepo struct{}
 
-func (dr *DocumentRepo) GetResourceAttributes(resourceID string) (abac.Attributes, error) {
+func (dr *DocumentRepo) GetResourceAttributes(ctx *context.Context, resourceID interface{}, resourceType *interface{}) (abac.Attributes, error) {
 	fmt.Printf("PIP: Fetching attributes for resource '%s'\n", resourceID)
 	// Mock data tài nguyên (đơn từ)
 	requests := map[string]abac.Attributes{
@@ -45,7 +51,12 @@ func (dr *DocumentRepo) GetResourceAttributes(resourceID string) (abac.Attribute
 		"/requests/t2_hr_leave_001": {"id": "/requests/t2_hr_leave_001", "type": "leave_request", "department": "hr", "tenant": "tenant2", "level": 2},
 		"/requests/t2_sales_ot_002": {"id": "/requests/t2_sales_ot_002", "type": "overtime_request", "department": "sales", "tenant": "tenant2", "level": 2},
 	}
-	if req, ok := requests[resourceID]; ok {
+	//convert resourceID to string
+	resourceIDStr, ok := resourceID.(string)
+	if !ok {
+		return nil, abac.ErrResourceNotFound
+	}
+	if req, ok := requests[resourceIDStr]; ok {
 		return req, nil
 	}
 	return nil, abac.ErrResourceNotFound
