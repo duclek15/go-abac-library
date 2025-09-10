@@ -147,15 +147,10 @@ func newSystemWithEnforcer(e *casbin.Enforcer, sf SubjectFetcher, rf ResourceFet
 // =========================================================================
 
 // Check là hàm chính để kiểm tra quyền truy cập.
-func (a *Authorizer) Check(ctx *context.Context, tenantID string, subjectID string, resourceID string, action string, envAttrs Attributes) (bool, error) {
+func (a *Authorizer) Check(ctx *context.Context, tenantID string, subjectID string, resourceIDs []string, action string, envAttrs Attributes) (bool, error) {
 	subAttrs, err := a.subjectFetcher.GetSubjectAttributes(ctx, subjectID, nil)
 	if err != nil {
 		return false, fmt.Errorf("subject attributes error: %w", err)
-	}
-
-	resAttrs, err := a.resourceFetcher.GetResourceAttributes(ctx, resourceID, nil)
-	if err != nil {
-		return false, fmt.Errorf("resource attributes error: %w", err)
 	}
 
 	// Nếu envAttrs từ bên ngoài là nil, khởi tạo một map rỗng.
@@ -169,14 +164,24 @@ func (a *Authorizer) Check(ctx *context.Context, tenantID string, subjectID stri
 		envAttrs["timeOfDay"] = time.Now().Hour()
 	}
 
-	request := &AuthorizationRequest{
-		Subject:  subAttrs,
-		Resource: resAttrs,
-		Action:   action,
-		Env:      envAttrs,
-	}
+	for _, resourceID := range resourceIDs {
+		resAttrs, err := a.resourceFetcher.GetResourceAttributes(ctx, resourceID, nil)
+		if err != nil {
+			return false, fmt.Errorf("resource attributes error: %w", err)
+		}
 
-	return a.enforcer.Enforce(tenantID, request)
+		request := &AuthorizationRequest{
+			Subject:  subAttrs,
+			Resource: resAttrs,
+			Action:   action,
+			Env:      envAttrs,
+		}
+		allowed, err := a.enforcer.Enforce(tenantID, request)
+		if err != nil || !allowed {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 // AuthorizationRequest chứa tất cả thông tin cho một yêu cầu phân quyền.
