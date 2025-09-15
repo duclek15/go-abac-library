@@ -163,6 +163,20 @@ func (a *Authorizer) Check(ctx *context.Context, tenantID string, subject interf
 	if err != nil {
 		return false, fmt.Errorf("resource attributes error: %w", err)
 	}
+	if listResAttrs == nil || len(listResAttrs) == 0 {
+		request := &AuthorizationRequest{
+			Subject:  subAttrs,
+			Resource: Attributes{},
+			Action:   action,
+			Env:      envAttrs,
+		}
+		allowed, err := a.enforcer.Enforce(tenantID, request)
+		if err != nil || !allowed {
+			return false, err
+		}
+		return allowed, nil
+
+	}
 	for _, resAttribute := range listResAttrs {
 		request := &AuthorizationRequest{
 			Subject:  subAttrs,
