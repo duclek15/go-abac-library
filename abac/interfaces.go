@@ -8,10 +8,10 @@ type Attributes map[string]interface{}
 
 // SubjectFetcher lấy thuộc tính của một chủ thể (người dùng).
 type SubjectFetcher interface {
-	GetSubjectAttributes(ctx *context.Context, subjectID interface{}, subjectType *interface{}) (Attributes, error)
+	GetSubjectAttributes(ctx *context.Context, subject interface{}) (Attributes, error)
 }
 
 // ResourceFetcher lấy thuộc tính của một tài nguyên.
 type ResourceFetcher interface {
-	GetResourceAttributes(ctx *context.Context, resourceID interface{}, resourceType *interface{}) (Attributes, error)
+	GetResourceAttributes(ctx *context.Context, resource interface{}) ([]Attributes, error)
 }

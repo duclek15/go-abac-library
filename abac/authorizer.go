@@ -6,14 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
-	"time"
-
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
 	gormadapter "github.com/casbin/gorm-adapter/v3"
 	"github.com/casbin/govaluate"
 	"gorm.io/gorm"
+	"strings"
 )
 
 // Authorizer là PDP, chứa logic phân quyền.
@@ -147,32 +145,28 @@ func newSystemWithEnforcer(e *casbin.Enforcer, sf SubjectFetcher, rf ResourceFet
 // =========================================================================
 
 // Check là hàm chính để kiểm tra quyền truy cập.
-func (a *Authorizer) Check(ctx *context.Context, tenantID string, subjectID string, resourceIDs []string, action string, envAttrs Attributes) (bool, error) {
-	subAttrs, err := a.subjectFetcher.GetSubjectAttributes(ctx, subjectID, nil)
+func (a *Authorizer) Check(ctx *context.Context, tenantID string, subject interface{}, resource interface{}, action string, envAttrsInput *Attributes) (bool, error) {
+	subAttrs, err := a.subjectFetcher.GetSubjectAttributes(ctx, subject)
 	if err != nil {
 		return false, fmt.Errorf("subject attributes error: %w", err)
 	}
 
 	// Nếu envAttrs từ bên ngoài là nil, khởi tạo một map rỗng.
-	if envAttrs == nil {
-		envAttrs = Attributes{}
+	var envAttrs Attributes
+	if envAttrsInput != nil {
+		envAttrs = *envAttrsInput
+	} else {
+		envAttrs = make(Attributes)
 	}
 
-	// Bổ sung các thuộc tính môi trường do thư viện tự sinh ra.
-	// Cách này cho phép ghi đè nếu cần thiết.
-	if _, ok := envAttrs["timeOfDay"]; !ok {
-		envAttrs["timeOfDay"] = time.Now().Hour()
+	listResAttrs, err := a.resourceFetcher.GetResourceAttributes(ctx, resource)
+	if err != nil {
+		return false, fmt.Errorf("resource attributes error: %w", err)
 	}
-
-	for _, resourceID := range resourceIDs {
-		resAttrs, err := a.resourceFetcher.GetResourceAttributes(ctx, resourceID, nil)
-		if err != nil {
-			return false, fmt.Errorf("resource attributes error: %w", err)
-		}
-
+	for _, resAttribute := range listResAttrs {
 		request := &AuthorizationRequest{
 			Subject:  subAttrs,
-			Resource: resAttrs,
+			Resource: resAttribute,
 			Action:   action,
 			Env:      envAttrs,
 		}
