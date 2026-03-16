@@ -132,6 +132,104 @@ go build ./...              # Build
 - `github.com/casbin/govaluate` v1.8.0 — Expression evaluation
 - `gorm.io/gorm` v1.30.0 — ORM
 
+## ABAC Evaluation Flow (Check internals)
+
+```
+Authorizer.Check(ctx, tenantID, subject, resource, action, envAttrs)
+  │
+  ├── 1. SubjectFetcher.GetSubjectAttributes(ctx, subject)
+  │      → Returns Attributes (map[string]interface{})
+  │      → Contains: organizations, roles, subordinate_units, job_titles, etc.
+  │
+  ├── 2. ResourceFetcher.GetResourceAttributes(ctx, resource)
+  │      → Returns []Attributes (one per resource)
+  │      → Contains: resource type, owner, metadata
+  │
+  ├── 3. Build request object (req):
+  │      req = {Subject: subjectAttrs, Resource: resourceAttrs, Action: action, Env: envAttrs}
+  │
+  ├── 4. Casbin Enforce(tenantID, req)
+  │      → Load policies matching tenant (or wildcard '*')
+  │      → For each policy: evaluate(rule, req)
+  │        → Expression engine (govaluate) evaluates rule string
+  │        → Custom functions called during evaluation (hasOrgRole, etc.)
+  │      → Apply policy effect: allow if any allow AND no deny
+  │
+  └── 5. Return (allowed bool, err error)
+
+CheckWithTrace() adds:
+  → DecisionTrace with: MatchedPolicies, Predicates, AttributesEvaluated, EvaluationMs
+```
+
+## How Backend Uses This Library
+
+### Initialization (Wire DI)
+
+```go
+// backend_go/internal/wire/providers/abac.go
+func ProvideABACSystem(db *gorm.DB, sf SubjectFetcher, rf ResourceFetcher) (*abac.Authorizer, *abac.PolicyManager) {
+    customFuncs := abac.CustomFunctionMap{
+        "hasOrgRole":                  HasOrgRoleFunc,
+        "hasUnitRole":                 HasUnitRoleFunc,
+        "hasUnitJobTitle":             HasUnitJobTitleFunc,
+        "hasUnitJobLevel":             HasUnitJobLevelFunc,
+        "hasUnitJobTitleAndJobLevel":  HasUnitJobTitleAndJobLevelFunc,
+        "checkNestedSlice":            CheckNestedSliceFunc,
+        "checkNestedObject":           CheckNestedObjectFunc,
+        "matches":                     MatchesFunc,
+    }
+    authorizer, policyManager := abac.NewABACSystemFromDB(
+        "config/abac_model.conf", db, sf, rf, customFuncs,
+    )
+    return authorizer, policyManager
+}
+```
+
+### Subject Attributes Structure (passed to SubjectFetcher)
+
+Backend's SubjectFetcher returns this structure via gRPC from subject-attribute-service:
+
+```json
+{
+  "id": "user_uuid",
+  "tenant_id": "tenant_uuid",
+  "tenant_role": "admin",
+  "organizations": [
+    {
+      "id": "org_uuid",
+      "role": "org_admin",
+      "staff_profile_id": "sp_uuid",
+      "subordinate_units": [
+        {
+          "id": "unit_uuid",
+          "role": "unit_manager",
+          "job_title_id": "jt_uuid",
+          "job_level_id": "jl_uuid"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Custom functions traverse this structure. Example: `hasOrgRole(Subject, 'org_uuid', 'org_admin')` iterates `Subject.organizations[]`, finds matching `id`, checks `role`.
+
+### Permission Check UseCase
+
+```go
+// backend_go/internal/modules/authorization/application/queries/check_permission.go
+func (uc *checkPermissionUseCase) Execute(ctx context.Context, input CheckPermissionInput) (bool, error) {
+    allowed, trace, err := uc.abacAuthorizer.CheckWithTrace(
+        &ctx, orgID, userID, input.Resources, input.Action, input.Env,
+        abac.WithPredicateTracing(true),
+        abac.WithAttributeTracing(true),
+    )
+    // Publish audit event to Kafka
+    uc.publishAuditEvent(ctx, input, allowed, trace)
+    return allowed, err
+}
+```
+
 ## Remaining Improvements
 - **Caching**: No built-in caching for fetcher results or decisions — callers should implement in Fetcher or use decorator
 - **Policy hot-reload**: `LoadPoliciesFromStorage()` exists but no automatic watcher
