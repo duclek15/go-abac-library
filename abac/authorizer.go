@@ -378,6 +378,57 @@ func (a *Authorizer) Check(ctx *context.Context, tenantID string, subject interf
 	if err != nil {
 		return false, fmt.Errorf("resource attributes error: %w", err)
 	}
+
+	return a.enforceOne(tenantID, subAttrs, listResAttrs, action, envAttrs)
+}
+
+// CheckMany chấm nhiều action trên CÙNG subject và resource. Khác với gọi
+// Check() N lần, attribute (subject + resource) được nạp đúng MỘT lần rồi
+// dùng lại cho mọi action — Enforce vẫn chạy N lần vì mỗi action là một
+// quyết định độc lập. Kết quả trả về theo đúng thứ tự actions (results[i]
+// ứng với actions[i]).
+//
+// Lỗi nạp attribute (subject hoặc resource) làm hỏng cả cụm: không có gì để
+// chấm. Lỗi Enforce ở bất kỳ action nào cũng làm hỏng cả cụm — nhất quán với
+// Check/PEP: một rule hỏng nghĩa là engine không đáng tin cho tenant đó ở
+// thời điểm này, không nên âm thầm trả false riêng cho action đó.
+//
+// Không mở API nhận attribute từ bên ngoài: subject/resource vẫn phải đi qua
+// fetcher như Check, giữ bất biến "attribute chỉ đến từ fetcher".
+func (a *Authorizer) CheckMany(ctx *context.Context, tenantID string, subject interface{}, resource interface{}, actions []string, envAttrsInput *Attributes) ([]bool, error) {
+	subAttrs, err := a.subjectFetcher.GetSubjectAttributes(ctx, subject)
+	if err != nil {
+		return nil, fmt.Errorf("subject attributes error: %w", err)
+	}
+
+	var envAttrs Attributes
+	if envAttrsInput != nil {
+		envAttrs = *envAttrsInput
+	} else {
+		envAttrs = make(Attributes)
+	}
+
+	listResAttrs, err := a.resourceFetcher.GetResourceAttributes(ctx, resource)
+	if err != nil {
+		return nil, fmt.Errorf("resource attributes error: %w", err)
+	}
+
+	results := make([]bool, len(actions))
+	for i, action := range actions {
+		allowed, err := a.enforceOne(tenantID, subAttrs, listResAttrs, action, envAttrs)
+		if err != nil {
+			return nil, fmt.Errorf("enforce action %q error: %w", action, err)
+		}
+		results[i] = allowed
+	}
+	return results, nil
+}
+
+// enforceOne chấm một action trên attribute ĐÃ NẠP SẴN (subject + danh sách
+// resource) — không tự fetch. Đây là ruột dùng chung giữa Check (fetch rồi
+// gọi 1 lần) và CheckMany (fetch rồi gọi N lần), gồm cả nhánh resource rỗng
+// và nhánh AND đa resource (mọi resource phải allow thì hành động mới allow).
+func (a *Authorizer) enforceOne(tenantID string, subAttrs Attributes, listResAttrs []Attributes, action string, envAttrs Attributes) (bool, error) {
 	if listResAttrs == nil || len(listResAttrs) == 0 {
 		request := &AuthorizationRequest{
 			Subject:  subAttrs,
@@ -390,8 +441,8 @@ func (a *Authorizer) Check(ctx *context.Context, tenantID string, subject interf
 			return false, err
 		}
 		return allowed, nil
-
 	}
+
 	for _, resAttribute := range listResAttrs {
 		request := &AuthorizationRequest{
 			Subject:  subAttrs,
