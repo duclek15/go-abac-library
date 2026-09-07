@@ -4,8 +4,11 @@ import "github.com/casbin/casbin/v2"
 
 // PolicyManager đóng vai trò là PAP, cung cấp một giao diện hoàn chỉnh
 // để quản lý các quy tắc policy trong bộ nhớ của Casbin.
+//
+// enforcer dùng *casbin.SyncedEnforcer — cùng một instance được chia sẻ với
+// Authorizer (PDP) qua newSystemWithEnforcer. Xem ghi chú ở Authorizer.enforcer.
 type PolicyManager struct {
-	enforcer *casbin.Enforcer
+	enforcer *casbin.SyncedEnforcer
 }
 
 // =========================================================================

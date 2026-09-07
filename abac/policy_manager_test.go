@@ -20,7 +20,7 @@ func newTestPolicyManager(t *testing.T) *PolicyManager {
 	if err != nil {
 		t.Fatalf("failed to create model: %v", err)
 	}
-	e, err := casbin.NewEnforcer(m)
+	e, err := casbin.NewSyncedEnforcer(m)
 	if err != nil {
 		t.Fatalf("failed to create enforcer: %v", err)
 	}

@@ -16,8 +16,14 @@ import (
 )
 
 // Authorizer là PDP, chứa logic phân quyền.
+//
+// enforcer dùng *casbin.SyncedEnforcer (không phải *casbin.Enforcer trần) vì
+// nó là singleton dùng chung cho cả process: mọi request PEP gọi Enforce()
+// đồng thời với LoadPolicy() chạy nền (reconciler định kỳ + xử lý sự kiện đổi
+// policy). SyncedEnforcer tự bọc RWMutex quanh mọi entrypoint (Enforce, AddPolicy,
+// LoadPolicy, ...) nên không có đường nào lọt lưới như khi tự khoá thủ công.
 type Authorizer struct {
-	enforcer        *casbin.Enforcer
+	enforcer        *casbin.SyncedEnforcer
 	subjectFetcher  SubjectFetcher
 	resourceFetcher ResourceFetcher
 }
@@ -197,7 +203,7 @@ func (c *traceCollector) OnAttributeRead(scope, path string, value interface{}) 
 
 // NewABACSystemFromFile khởi tạo hệ thống từ file model và file policy.
 func NewABACSystemFromFile(modelPath, policyPath string, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
-	e, err := casbin.NewEnforcer(modelPath, policyPath)
+	e, err := casbin.NewSyncedEnforcer(modelPath, policyPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create enforcer from file: %w", err)
 	}
@@ -211,7 +217,7 @@ func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf Re
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gorm adapter: %w", err)
 	}
-	e, err := casbin.NewEnforcer(modelPath, adapter)
+	e, err := casbin.NewSyncedEnforcer(modelPath, adapter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create enforcer from adapter: %w", err)
 	}
@@ -237,7 +243,7 @@ func NewABACSystemFromDBUseTableName(
 		return nil, nil, fmt.Errorf("failed to create gorm adapter with table name %s: %w", tableName, err)
 	}
 
-	e, err := casbin.NewEnforcer(modelPath, adapter)
+	e, err := casbin.NewSyncedEnforcer(modelPath, adapter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create enforcer: %w", err)
 	}
@@ -253,7 +259,7 @@ func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create model from string: %w", err)
 	}
-	e, err := casbin.NewEnforcer(m)
+	e, err := casbin.NewSyncedEnforcer(m)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create enforcer from model object: %w", err)
 	}
@@ -284,7 +290,7 @@ func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf 
 // Key là tên hàm sẽ dùng trong policy, Value là hàm Go tương ứng.
 
 // newSystemWithEnforcer là hàm private để hoàn tất việc khởi tạo, tránh lặp code.
-func newSystemWithEnforcer(e *casbin.Enforcer, sf SubjectFetcher, rf ResourceFetcher, customFunction CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
+func newSystemWithEnforcer(e *casbin.SyncedEnforcer, sf SubjectFetcher, rf ResourceFetcher, customFunction CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
 	// Tạo một instance của evaluator, truyền map custom function vào.
 	evaluator := &expressionEvaluator{
 		userFunctions: customFunction,
