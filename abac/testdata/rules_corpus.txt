@@ -1,0 +1,81 @@
+# Corpus rule dùng cho differential/race/benchmark test của expression cache.
+#
+# PHẦN 1 — RULE THẬT (đánh dấu [REAL #<id>]): 22 dòng `p` (v0=tenant,
+# v1=rule, v2=effect) dump trực tiếp từ bảng casbin_rule, DB `eduone` trên
+# netlab (100.64.0.111), do coordinator SELECT hộ lúc 16:08 vì phiên sandbox
+# của agent thi công không có SSH key hợp lệ tới netlab. File dump gốc:
+# .../scratchpad/casbin_p_rules_dev.tsv (id, ptype, v0..v5).
+#
+# Loại 1 dòng (id=132, checkNestedSlice(...)&&() ) khỏi corpus vì bị VỠ khi
+# dump — v1 gốc trong DB chứa ký tự xuống dòng, TSV dump theo dòng nên tách
+# đôi record, còn lại "...&& (" cụt vế sau, cú pháp không hợp lệ. Không đoán
+# hay viết bù phần bị mất — loại thẳng, không dùng dữ liệu hỏng.
+#
+# PHẦN 2 — RULE TỰ SOẠN (đánh dấu [SELF-AUTHORED]): 20 dòng viết tay để phủ
+# các dạng cú pháp KHÔNG xuất hiện trong 22 rule thật ở trên — 22 rule thật
+# chỉ dùng AND (&&), không có OR (||) hay NOT (!), và chỉ gọi hàm phía
+# backend (hasAnyAssignedRole, hasAssignedRoleInResourceOrg,
+# belongsToResourceOrg, checkNestedSliceFunc, hasAnyOrgRole) chứ không đụng
+# tới hàm built-in nào của chính go-abac-library (has, intersects,
+# isIpInCidr, isBusinessHours, hasGlobalRole, hasTenantRole, hasOrgRole).
+# Phần tự soạn dùng ĐÚNG các hàm built-in đó (implementation thật trong
+# function.go, không phải stub) cộng thêm OR/NOT/ngoặc lồng nhau và accessor
+# Env.x, để differential test phủ được các nhánh cú pháp mà rule thật không
+# có, đúng như coordinator yêu cầu bổ sung.
+#
+# Hàm chỉ có ở backend (hasAnyAssignedRole, hasAssignedRoleInResourceOrg,
+# belongsToResourceOrg, checkNestedSliceFunc, hasAnyOrgRole) không tồn tại
+# trong go-abac-library — bộ test copy NGUYÊN VĂN 6 hàm này từ
+# backend_go/internal/modules/authorization/domain/services/functions.go vào
+# abac/corpus_functions_test.go (predicate thật, không phải stub) để chạy
+# được cả differential lẫn benchmark trên đúng rule thật này. Không hàm nào
+# trong corpus bị loại ở bản hiện tại — cơ chế loại rule gọi hàm chưa đăng ký
+# vẫn tồn tại và có unit test riêng (TestFilterExecutable_ExcludesUnknownFunctions)
+# để không rơi vào tình huống "viết cơ chế nhưng chưa bao giờ thấy nó chạy".
+#
+# Định dạng: tenant<TAB>rule<TAB>effect — một dòng một rule.
+
+# --- PHẦN 1: REAL (từ casbin_rule, DB dev netlab) ---
+*	Subject.role == "sudo"	allow	# [REAL #129]
+3414821b-e57f-4e4f-82fc-3d52fa8d54e6	hasAnyAssignedRole(Subject, "admin")	allow	# [REAL #131]
+3414821b-e57f-4e4f-82fc-3d52fa8d54e6	hasAssignedRoleInResourceOrg(Subject, Resource, "student")	allow	# [REAL #133]
+*	belongsToResourceOrg(Subject, Resource) && checkNestedSliceFunc(Subject, "organizations.subject_subordinate_units", "role", "academic_manager") && matches(Action, "^exam_schedule:(list|read)$")	allow	# [REAL #134]
+*	checkNestedSliceFunc(Subject, "organizations.subject_subordinate_units", "role", "teacher") && belongsToResourceOrg(Subject, Resource) && matches(Action, "^exam_schedule:(list|read)$")	allow	# [REAL #135]
+*	hasAnyOrgRole(Subject, "admin") && belongsToResourceOrg(Subject, Resource) && matches(Action, "^exam_schedule:(list|read)$")	allow	# [REAL #136]
+*	belongsToResourceOrg(Subject, Resource) && checkNestedSliceFunc(Subject, "organizations.subject_subordinate_units", "role", "academic_manager") && matches(Action, "^exam_schedule:(update_settings|manual_save|auto_preview|auto_save|delete|complete)$")	allow	# [REAL #137]
+*	hasAnyOrgRole(Subject, "admin") && belongsToResourceOrg(Subject, Resource) && matches(Action, "^exam_schedule:(update_settings|manual_save|auto_preview|auto_save|delete|complete)$")	allow	# [REAL #138]
+*	hasAnyOrgRole(Subject, "student") && matches(Action, "exam_schedule:.*")	deny	# [REAL #139]
+*	matches(Action, "exam_arrangement_result:.*")	allow	# [REAL #143]
+*	Subject.role == "sudo" && matches(Action, "^tenant:list$")	allow	# [REAL #144]
+*	belongsToResourceOrg(Subject, Resource) && checkNestedSliceFunc(Subject, "organizations.subject_subordinate_units", "role", "teacher") && matches(Action, "experience_schedule_registration:(list|detail|list_classes|list_students|history)")	allow	# [REAL #147]
+*	hasAssignedRoleInResourceOrg(Subject, Resource, "experience_schedule_approver") && matches(Action, "experience_schedule_registration:(list|list_all|detail|approve|reject|history)")	allow	# [REAL #148]
+*	hasAssignedRoleInResourceOrg(Subject, Resource, "admin") && matches(Action, "experience_schedule_registration:.*")	allow	# [REAL #149]
+*	hasAnyOrgRole(Subject, "student") && matches(Action, "experience_schedule_registration:.*")	deny	# [REAL #150]
+*	hasAssignedRoleInResourceOrg(Subject, Resource, "head") && matches(Action, "experience_schedule_registration:(list|detail|create|update|delete|list_classes|list_students|conflict_check|submit|resubmit|history)")	allow	# [REAL #151]
+*	hasAssignedRoleInResourceOrg(Subject, Resource, "academic_manager") && matches(Action, "experience_schedule_registration:(list|detail|create|update|delete|list_classes|list_students|conflict_check|submit|resubmit|history)")	allow	# [REAL #152]
+*	belongsToResourceOrg(Subject, Resource) && checkNestedSliceFunc(Subject, "organizations.subject_subordinate_units", "role", "academic_manager") && matches(Action, "timetable:auto_schedule_(run|read|cancel|confirm|export|precheck|history|delete_draft)")	allow	# [REAL #153]
+*	hasAnyOrgRole(Subject, "admin") && belongsToResourceOrg(Subject, Resource) && matches(Action, "timetable:auto_schedule_.*")	allow	# [REAL #154]
+*	checkNestedSliceFunc(Subject, "organizations.subject_subordinate_units", "role", "head") && belongsToResourceOrg(Subject, Resource) && matches(Action, "timetable:auto_schedule_(read|history)")	allow	# [REAL #155]
+3414821b-e57f-4e4f-82fc-3d52fa8d54e6	hasAssignedRoleInResourceOrg(Subject, Resource, "debug_p4a_narrow") && matches(Action, "^field_of_study:list$")	allow	# [REAL #156]
+3414821b-e57f-4e4f-82fc-3d52fa8d54e6	hasAssignedRoleInResourceOrg(Subject, Resource, "debug_p4a_narrow") && matches(Action, "^academic_discipline:list$")	allow	# [REAL #157]
+# --- PHẦN 2: SELF-AUTHORED (phủ OR/NOT/hàm built-in của thư viện — rule thật không có) ---
+*	Action == 'approve_level_2' && hasGlobalRole(Subject, 'root')	allow
+tenant1	Action == 'approve_level_2' && hasTenantRole(Subject, 'tenant1', 'hr_manager')	allow
+tenant2	Action == 'approve_level_2' && hasTenantRole(Subject, 'tenant2', 'hr_manager') && Resource.department == 'hr'	allow
+*	hasOrgRole(Subject, 'org1', 'manager') || hasGlobalRole(Subject, 'root')	allow
+*	!hasGlobalRole(Subject, 'root') && Action == 'view_directory'	deny
+*	has(Subject.tags, 'vip') && !has(Resource.tags, 'restricted')	allow
+*	intersects(Subject.tags, Resource.tags)	allow
+*	isBusinessHours(Env.hour, 8, 18) && Action == 'checkin'	allow
+*	!isBusinessHours(Env.hour, 8, 18) && Action == 'checkin'	deny
+*	isIpInCidr(Env.ip, '10.0.0.0/8')	allow
+*	!isIpInCidr(Env.ip, '10.0.0.0/8') && Action == 'admin_panel'	deny
+*	matches(Action, "user:.*|staff_profile:.*|student_profile:.*|audience:.*|visiting_lecturer:.*|profile:.*") && hasOrgRole(Subject, 'org1', 'admin')	allow
+*	(hasTenantRole(Subject, 'tenant1', 'hr_manager') || hasTenantRole(Subject, 'tenant1', 'admin')) && Resource.department != 'finance'	allow
+*	Subject.role == 'guest' && Action != 'read'	deny
+*	(Env.channel == 'mobile' || Env.channel == 'web') && hasGlobalRole(Subject, 'root')	allow
+*	!has(Subject.tags, 'banned') && matches(Resource.owner, "^user_[0-9]+$")	allow
+*	hasTenantRole(Subject, 'tenant2', 'hr_manager') && (Resource.department == 'hr' || Resource.department == 'payroll') && !isBusinessHours(Env.hour, 0, 6)	allow
+*	hasGlobalRole(Subject, 'root') || (hasTenantRole(Subject, 'tenant1', 'hr_manager') && hasOrgRole(Subject, 'org1', 'manager'))	allow
+*	!(hasGlobalRole(Subject, 'root') || hasTenantRole(Subject, 'tenant1', 'hr_manager'))	deny
+*	Action == 'approve_level_2' && (Resource.department == 'hr' || Resource.department == 'sales') && !hasTenantRole(Subject, 'tenant2', 'hr_manager')	deny

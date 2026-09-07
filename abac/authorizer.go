@@ -26,6 +26,12 @@ type Authorizer struct {
 	enforcer        *casbin.SyncedEnforcer
 	subjectFetcher  SubjectFetcher
 	resourceFetcher ResourceFetcher
+
+	// cache là expression cache dùng chung với expressionEvaluator (qua closure
+	// AddFunction bên dưới). Enforce/Check không cần trực tiếp đọc field này —
+	// nó chỉ được giữ lại để test nội bộ (package abac) soi kích thước cache;
+	// nil nếu tạo Authorizer với WithoutExpressionCache().
+	cache *expressionCache
 }
 
 type CustomFunctionMap map[string]govaluate.ExpressionFunction
@@ -33,6 +39,33 @@ type CustomFunctionMap map[string]govaluate.ExpressionFunction
 // expressionEvaluator là một struct giữ trạng thái các hàm tùy chỉnh của người dùng.
 type expressionEvaluator struct {
 	userFunctions CustomFunctionMap
+
+	// cache giữ pool các expression govaluate đã parse, theo khóa là văn bản
+	// rule (xem expression_cache.go). nil khi bị tắt qua WithoutExpressionCache()
+	// — khi đó Evaluate luôn đi đường parse-mỗi-lần (evaluateUncached).
+	cache *expressionCache
+}
+
+// authorizerConfig gom các tuỳ chọn tạo Authorizer (hiện chỉ có kill-switch
+// cache). Thêm field mới ở đây, không đổi chữ ký constructor.
+type authorizerConfig struct {
+	disableExpressionCache bool
+}
+
+// AuthorizerOption cấu hình hành vi tạo Authorizer/PolicyManager, truyền
+// variadic vào cuối các factory function (tương thích ngược với call site cũ
+// không truyền option nào).
+type AuthorizerOption interface{ apply(*authorizerConfig) }
+
+type authorizerOptFunc func(*authorizerConfig)
+
+func (f authorizerOptFunc) apply(c *authorizerConfig) { f(c) }
+
+// WithoutExpressionCache tắt cache expression, quay lại parse rule từ text ở
+// mỗi lần đánh giá (hành vi trước khi có cache). Dùng làm kill-switch khi cần
+// loại trừ cache là nguyên nhân một sự cố phân quyền.
+func WithoutExpressionCache() AuthorizerOption {
+	return authorizerOptFunc(func(c *authorizerConfig) { c.disableExpressionCache = true })
 }
 
 // ===== Trace types (optional reasoning) =====
@@ -202,16 +235,16 @@ func (c *traceCollector) OnAttributeRead(scope, path string, value interface{}) 
 // =========================================================================
 
 // NewABACSystemFromFile khởi tạo hệ thống từ file model và file policy.
-func NewABACSystemFromFile(modelPath, policyPath string, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
+func NewABACSystemFromFile(modelPath, policyPath string, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap, opts ...AuthorizerOption) (*Authorizer, *PolicyManager, error) {
 	e, err := casbin.NewSyncedEnforcer(modelPath, policyPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create enforcer from file: %w", err)
 	}
-	return newSystemWithEnforcer(e, sf, rf, customFunc)
+	return newSystemWithEnforcer(e, sf, rf, customFunc, opts...)
 }
 
 // NewABACSystemFromDB khởi tạo hệ thống với policy được nạp từ database.
-func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
+func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap, opts ...AuthorizerOption) (*Authorizer, *PolicyManager, error) {
 	gormadapter.TurnOffAutoMigrate(db)
 	adapter, err := gormadapter.NewAdapterByDB(db)
 	if err != nil {
@@ -224,7 +257,7 @@ func NewABACSystemFromDB(modelPath string, db *gorm.DB, sf SubjectFetcher, rf Re
 	if err := e.LoadPolicy(); err != nil {
 		return nil, nil, fmt.Errorf("failed to load policy from database: %w", err)
 	}
-	return newSystemWithEnforcer(e, sf, rf, customFunc)
+	return newSystemWithEnforcer(e, sf, rf, customFunc, opts...)
 }
 
 // NewABACSystemFromDBUseTableName khởi tạo hệ thống từ DB với một tên bảng tùy chỉnh.
@@ -236,6 +269,7 @@ func NewABACSystemFromDBUseTableName(
 	sf SubjectFetcher,
 	rf ResourceFetcher,
 	customFunc map[string]govaluate.ExpressionFunction,
+	opts ...AuthorizerOption,
 ) (*Authorizer, *PolicyManager, error) {
 	gormadapter.TurnOffAutoMigrate(db)
 	adapter, err := gormadapter.NewAdapterByDBUseTableName(db, preFix, tableName)
@@ -250,11 +284,11 @@ func NewABACSystemFromDBUseTableName(
 	if err := e.LoadPolicy(); err != nil {
 		return nil, nil, fmt.Errorf("failed to load policy from database: %w", err)
 	}
-	return newSystemWithEnforcer(e, sf, rf, customFunc)
+	return newSystemWithEnforcer(e, sf, rf, customFunc, opts...)
 }
 
 // NewABACSystemFromStrings khởi tạo hệ thống từ các chuỗi model và policy trong bộ nhớ.
-func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
+func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf ResourceFetcher, customFunc CustomFunctionMap, opts ...AuthorizerOption) (*Authorizer, *PolicyManager, error) {
 	m, err := model.NewModelFromString(modelStr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create model from string: %w", err)
@@ -283,17 +317,27 @@ func NewABACSystemFromStrings(modelStr, policyStr string, sf SubjectFetcher, rf 
 		}
 	}
 
-	return newSystemWithEnforcer(e, sf, rf, customFunc)
+	return newSystemWithEnforcer(e, sf, rf, customFunc, opts...)
 }
 
 // CustomFunctionMap định nghĩa một map chứa các hàm tùy chỉnh mà người dùng muốn thêm.
 // Key là tên hàm sẽ dùng trong policy, Value là hàm Go tương ứng.
 
 // newSystemWithEnforcer là hàm private để hoàn tất việc khởi tạo, tránh lặp code.
-func newSystemWithEnforcer(e *casbin.SyncedEnforcer, sf SubjectFetcher, rf ResourceFetcher, customFunction CustomFunctionMap) (*Authorizer, *PolicyManager, error) {
+func newSystemWithEnforcer(e *casbin.SyncedEnforcer, sf SubjectFetcher, rf ResourceFetcher, customFunction CustomFunctionMap, opts ...AuthorizerOption) (*Authorizer, *PolicyManager, error) {
+	cfg := &authorizerConfig{}
+	for _, o := range opts {
+		o.apply(cfg)
+	}
+
 	// Tạo một instance của evaluator, truyền map custom function vào.
 	evaluator := &expressionEvaluator{
 		userFunctions: customFunction,
+	}
+	var cache *expressionCache
+	if !cfg.disableExpressionCache {
+		cache = newExpressionCache(customFunction)
+		evaluator.cache = cache
 	}
 
 	// Đăng ký phương thức Evaluate của INSTANCE evaluator đó.
@@ -302,9 +346,11 @@ func newSystemWithEnforcer(e *casbin.SyncedEnforcer, sf SubjectFetcher, rf Resou
 		enforcer:        e,
 		subjectFetcher:  sf,
 		resourceFetcher: rf,
+		cache:           cache,
 	}
 	policyManager := &PolicyManager{
 		enforcer: e,
+		cache:    cache,
 	}
 	return authorizer, policyManager, nil
 }
@@ -485,7 +531,19 @@ func (ev *expressionEvaluator) Evaluate(args ...interface{}) (interface{}, error
 		}
 	}
 
-	// Kết hợp các hàm, có thể wrap để trace predicate
+	if ev.cache == nil {
+		return ev.evaluateUncached(ruleStr, req, policyID, ruleID)
+	}
+	return ev.evaluateCached(ruleStr, req, policyID, ruleID)
+}
+
+// wrappedFunctionsForRequest kết hợp userFunctions với wrapper trace predicate
+// (nếu request có bật predicate tracing). Wrapper ở đây capture trực tiếp
+// `req` — CHỈ an toàn khi expression được tạo mới ngay trong lần gọi này và
+// không bị tái sử dụng cho request khác (đường evaluateUncached). Đường có
+// cache (evaluateCached, expression_cache.go) KHÔNG dùng hàm này — nó wrap
+// theo slot observer ổn định để tránh rò rỉ trace giữa các request.
+func (ev *expressionEvaluator) wrappedFunctionsForRequest(req *AuthorizationRequest) CustomFunctionMap {
 	allFunctions := make(CustomFunctionMap)
 	if ev.userFunctions != nil {
 		for name, function := range ev.userFunctions {
@@ -511,6 +569,15 @@ func (ev *expressionEvaluator) Evaluate(args ...interface{}) (interface{}, error
 		}
 		allFunctions = wrapped
 	}
+	return allFunctions
+}
+
+// evaluateUncached parse ruleStr từ text ở MỌI lần gọi — hành vi gốc trước khi
+// có cache. Giữ lại làm oracle cho differential test (expression_cache_test.go)
+// và làm đường thoát khi WithoutExpressionCache() được bật.
+func (ev *expressionEvaluator) evaluateUncached(ruleStr string, req *AuthorizationRequest, policyID, ruleID string) (interface{}, error) {
+	// Kết hợp các hàm, có thể wrap để trace predicate
+	allFunctions := ev.wrappedFunctionsForRequest(req)
 
 	// Khởi tạo bộ đánh giá biểu thức với BỘ HÀM ĐÃ KẾT HỢP
 	expr, err := govaluate.NewEvaluableExpressionWithFunctions(ruleStr, allFunctions)
@@ -518,6 +585,13 @@ func (ev *expressionEvaluator) Evaluate(args ...interface{}) (interface{}, error
 		return false, fmt.Errorf("invalid rule syntax '%s': %w", ruleStr, err)
 	}
 
+	return evaluateParsedExpr(expr, req, ruleStr, policyID, ruleID)
+}
+
+// evaluateParsedExpr chạy expr đã parse với attributes của req, rồi ghi nhận
+// rule matched vào trace nếu có. Dùng chung cho cả đường cache và không cache
+// để hai đường không lệch logic ngoài phần parse.
+func evaluateParsedExpr(expr *govaluate.EvaluableExpression, req *AuthorizationRequest, ruleStr, policyID, ruleID string) (interface{}, error) {
 	parameters := map[string]interface{}{
 		"Subject":  req.Subject,
 		"Resource": req.Resource,
